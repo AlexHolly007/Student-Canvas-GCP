@@ -5,7 +5,6 @@ import json, os
 from six.moves.urllib.request import urlopen
 from jose import jwt
 from authlib.integrations.flask_client import OAuth
-from dotenv import load_dotenv
 from app.routes import api_routes
 
 def create_app():
