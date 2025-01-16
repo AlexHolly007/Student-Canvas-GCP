@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify, send_file, current_app
-from app.main import verify_jwt, datastore_client, storage_client
+from app.utils import verify_jwt
 from google.cloud import datastore
-import requests, io, mimetypes, os
+import requests, io, mimetypes
 
 
 # blueprint init export
@@ -35,7 +35,7 @@ def get_users():
     valid_jwt = False
     admin_jwt = False
 
-    query = datastore_client.query(kind='users')
+    query = current_app.datastore_client.query(kind='users')
     users = query.fetch()
 
     #Complie all users
@@ -71,8 +71,8 @@ def get_user(user_id):
     payload = verify_jwt(request)
     sub = payload['sub']
 
-    user_key = datastore_client.key('users', user_id)
-    user = datastore_client.get(user_key)
+    user_key = current_app.datastore_client.key('users', user_id)
+    user = current_app.datastore_client.get(user_key)
 
     if user:
         user_data = user.copy()
@@ -92,8 +92,8 @@ def get_user_pic(user_id):
     payload = verify_jwt(request)
     sub = payload['sub']
 
-    user_key = datastore_client.key('users', user_id)
-    user = datastore_client.get(user_key)
+    user_key = current_app.datastore_client.key('users', user_id)
+    user = current_app.current_app.datastore_client.get(user_key)
 
     if not user:
         return jsonify({"Error": "User not found"}), 404
@@ -102,7 +102,7 @@ def get_user_pic(user_id):
     # if 'tag' in request.form:
     #     tag = request.form['tag']
 
-    bucket = storage_client.get_bucket(current_app.config.get('PHOTO_BUCKET'))
+    bucket = current_app.storage_client.get_bucket(current_app.config.get('PHOTO_BUCKET'))
     filename = f"{user_id}_avtr"
     blob = bucket.blob(filename)
 
@@ -135,10 +135,10 @@ def get_user_pic(user_id):
         file_obj.seek(0)
         blob.upload_from_file(file_obj, content_type=file_obj.content_type)
 
-        user['avatar_url'] = f'{current_app.config.get('SITE_URL')}/users/{user_id}/avatar'
-        datastore_client.put(user)
+        user['avatar_url'] = f'{current_app.config.get("SITE_URL")}/users/{user_id}/avatar'
+        current_app.datastore_client.put(user)
         
-        return {'avatar_url': f'{current_app.config.get('SITE_URL')}/users/{user_id}/avatar'}, 200
+        return {'avatar_url': f'{current_app.config.get("SITE_URL")}/users/{user_id}/avatar'}, 200
     
 
 #Delete the users avatar
@@ -147,15 +147,15 @@ def delete_user_avatar(user_id):
     payload = verify_jwt(request)
     sub = payload['sub']
 
-    user_key = datastore_client.key('users', user_id)
-    user = datastore_client.get(user_key)
+    user_key = current_app.datastore_client.key('users', user_id)
+    user = current_app.datastore_client.get(user_key)
 
     if not user:
         return jsonify({"Error": "User not found"}), 404
     if user['sub'] != sub:
         return jsonify({"Error": "You don't have permission on this resource"}), 403
 
-    bucket = storage_client.get_bucket(current_app.config.get('PHOTO_BUCKET'))
+    bucket = current_app.storage_client.get_bucket(current_app.config.get('PHOTO_BUCKET'))
     blob = bucket.blob(f"{user_id}_avtr")
 
     if not blob.exists():
@@ -164,7 +164,7 @@ def delete_user_avatar(user_id):
     blob.delete()
 
     user.pop('avatar_url')
-    datastore_client.put(user)
+    current_app.datastore_client.put(user)
 
     return '', 204
 
@@ -177,7 +177,7 @@ def create_course():
     payload = verify_jwt(request)
     sub = payload['sub']
 
-    query = datastore_client.query(kind='users')
+    query = current_app.datastore_client.query(kind='users')
     query.add_filter('sub', '=', sub)
     user = list(query.fetch())
     
@@ -189,13 +189,13 @@ def create_course():
     if not content or not all(key in content for key in ['subject', 'number', 'title', 'term', 'instructor_id']):
         return jsonify({"Error": "The request body is invalid"}), 400
 
-    instructor_key = datastore_client.key('users', content['instructor_id'])
-    instructor = datastore_client.get(instructor_key)
+    instructor_key = current_app.datastore_client.key('users', content['instructor_id'])
+    instructor = current_app.datastore_client.get(instructor_key)
 
     if not instructor or 'instructor' not in instructor['role']:
         return jsonify({"Error": "The request body is invalid"}), 400
 
-    course_key = datastore_client.key('courses')
+    course_key = current_app.datastore_client.key('courses')
     course = datastore.Entity(key=course_key)
 
     course.update({
@@ -206,10 +206,10 @@ def create_course():
         'instructor_id': content['instructor_id']
     })
 
-    datastore_client.put(course)
+    current_app.datastore_client.put(course)
 
     course['id'] = course.key.id
-    course['self'] = f'{current_app.config.get('SITE_URL')}/courses/{course.key.id}'
+    course['self'] = f'{current_app.config.get("SITE_URL")}/courses/{course.key.id}'
     return jsonify(course), 201
 
 
@@ -220,7 +220,7 @@ def get_courses():
     offset = request.args.get('offset', default=0, type=int)
     limit = request.args.get('limit', default=3, type=int)
 
-    query = datastore_client.query(kind='courses')
+    query = current_app.datastore_client.query(kind='courses')
     query.order = ['subject']
 
     courses = list(query.fetch(offset=offset, limit=limit))
@@ -231,12 +231,12 @@ def get_courses():
     for course in courses:
         course_data = course.copy()
         course_data['id'] = course.key.id
-        course_data['self'] = f'{current_app.config.get('SITE_URL')}/courses/{course.key.id}'
+        course_data['self'] = f'{current_app.config.get("SITE_URL")}/courses/{course.key.id}'
         course_list.append(course_data)
     
     response = {
         'courses': course_list,
-        'next': f'{current_app.config.get('SITE_URL')}/courses?offset={next_offset}&limit={limit}' if next_offset is not None else None
+        'next': f'{current_app.config.get("SITE_URL")}/courses?offset={next_offset}&limit={limit}' if next_offset is not None else None
     }
     
     return jsonify(response), 200
@@ -245,15 +245,15 @@ def get_courses():
 
 @api_routes.route('/courses/<int:course_id>', methods=['GET'])
 def get_course(course_id):
-    course_key = datastore_client.key('courses', course_id)
-    course = datastore_client.get(course_key)
+    course_key = current_app.datastore_client.key('courses', course_id)
+    course = current_app.datastore_client.get(course_key)
 
     if not course:
         return jsonify({"Error": "Not found"}), 404
 
     course_data = course.copy()
     course_data['id'] = course.key.id
-    course_data['self'] = f"{current_app.config.get('SITE_URL')}/courses/{course.key.id}"
+    course_data['self'] = f'{current_app.config.get("SITE_URL")}/courses/{course.key.id}'
 
     return jsonify(course_data), 200
 
@@ -266,15 +266,15 @@ def update_course(course_id):
     sub = payload['sub']
 
     #verify admin role
-    query = datastore_client.query(kind='users')
+    query = current_app.datastore_client.query(kind='users')
     query.add_filter('sub', '=', sub)
     user = list(query.fetch())
     
     if not user or 'admin' not in user[0]['role']:
         return jsonify({"Error": "You don't have permission on this resource"}), 403
 
-    course_key = datastore_client.key('courses', course_id)
-    course = datastore_client.get(course_key)
+    course_key = current_app.datastore_client.key('courses', course_id)
+    course = current_app.datastore_client.get(course_key)
 
     if not course:
         return jsonify({"Error": "Not found"}), 403
@@ -290,17 +290,17 @@ def update_course(course_id):
     if 'term' in content:
         course['term'] = content['term']
     if 'instructor_id' in content:
-        instructor_key = datastore_client.key('users', content['instructor_id'])
-        instructor = datastore_client.get(instructor_key)
+        instructor_key = current_app.datastore_client.key('users', content['instructor_id'])
+        instructor = current_app.datastore_client.get(instructor_key)
         if not instructor or 'instructor' not in instructor['role']:
             return jsonify({"Error": "The request body is invalid"}), 400
         course['instructor_id'] = content['instructor_id']
 
-    datastore_client.put(course)
+    current_app.datastore_client.put(course)
 
     course_data = course.copy()
     course_data['id'] = course.key.id
-    course_data['self'] = f"{current_app.config.get('SITE_URL')}/courses/{course.key.id}"
+    course_data['self'] = f'{current_app.config.get("SITE_URL")}/courses/{course.key.id}'
 
     return jsonify(course_data), 200
 
@@ -313,7 +313,7 @@ def delete_course(course_id):
     payload = verify_jwt(request)
     sub = payload['sub']
 
-    query = datastore_client.query(kind='users')
+    query = current_app.datastore_client.query(kind='users')
     query.add_filter('sub', '=', sub)
     user = list(query.fetch())
 
@@ -325,20 +325,20 @@ def delete_course(course_id):
     if 'admin' not in user_role:
         return jsonify({"Error": "You don't have permission on this resource"}), 403
 
-    course_key = datastore_client.key('courses', course_id)
-    course = datastore_client.get(course_key)
+    course_key = current_app.datastore_client.key('courses', course_id)
+    course = current_app.datastore_client.get(course_key)
 
     if not course:
         return jsonify({"Error": "No course with this ID exists."}), 403
 
-    enrollment_query = datastore_client.query(kind='enrollments')
+    enrollment_query = current_app.datastore_client.query(kind='enrollments')
     enrollment_query.add_filter('course_id', '=', course_id)
     enrollments = list(enrollment_query.fetch())
 
     for enrollment in enrollments:
-        datastore_client.delete(enrollment.key)
+        current_app.datastore_client.delete(enrollment.key)
 
-    datastore_client.delete(course_key)
+    current_app.datastore_client.delete(course_key)
 
     return '', 204
 
@@ -351,7 +351,7 @@ def get_course_enrollment(course_id):
     payload = verify_jwt(request)
     sub = payload['sub']
 
-    query = datastore_client.query(kind='users')
+    query = current_app.datastore_client.query(kind='users')
     query.add_filter('sub', '=', sub)
     user = list(query.fetch())
 
@@ -361,8 +361,8 @@ def get_course_enrollment(course_id):
     user_role = user[0]['role']
     user_id = user[0].key.id
 
-    course_key = datastore_client.key('courses', course_id)
-    course = datastore_client.get(course_key)
+    course_key = current_app.datastore_client.key('courses', course_id)
+    course = current_app.datastore_client.get(course_key)
 
     if not course:
         return jsonify({"Error": "No course with id"}), 403
@@ -370,7 +370,7 @@ def get_course_enrollment(course_id):
     if 'admin' not in user_role and course['instructor_id'] != user_id:
         return jsonify({"Error": "You don't have permission on this resource"}), 403
 
-    enrollment_query = datastore_client.query(kind='enrollments')
+    enrollment_query = current_app.datastore_client.query(kind='enrollments')
     enrollment_query.add_filter('course_id', '=', course_id)
     enrollments = list(enrollment_query.fetch())
 
@@ -388,7 +388,7 @@ def update_enrollment(course_id):
     payload = verify_jwt(request)
     sub = payload['sub']
 
-    query = datastore_client.query(kind='users')
+    query = current_app.datastore_client.query(kind='users')
     query.add_filter('sub', '=', sub)
     user = list(query.fetch())
 
@@ -397,8 +397,8 @@ def update_enrollment(course_id):
 
     user_role = user[0]['role']
 
-    course_key = datastore_client.key('courses', course_id)
-    course = datastore_client.get(course_key)
+    course_key = current_app.datastore_client.key('courses', course_id)
+    course = current_app.datastore_client.get(course_key)
 
     if not course:
         return jsonify({"Error": "No course with id"}), 403
@@ -413,7 +413,7 @@ def update_enrollment(course_id):
     if set(students_to_add).intersection(students_to_remove):
         return jsonify({"Error": "Enrollment invalid: overlapping values in add and renove"}), 409
 
-    student_query = datastore_client.query(kind='users')
+    student_query = current_app.datastore_client.query(kind='users')
     student_query.add_filter('role', '=', 'student')
     valid_students = {user.key.id for user in student_query.fetch()}
 
@@ -421,19 +421,19 @@ def update_enrollment(course_id):
         return jsonify({"Error": "Enrollment  invalid: invalid student IDs"}), 409
 
     for student_id in students_to_add:
-        enrollment_key = datastore_client.key('enrollments', f"{course_id}_{student_id}")
-        if not datastore_client.get(enrollment_key):
+        enrollment_key = current_app.datastore_client.key('enrollments', f"{course_id}_{student_id}")
+        if not current_app.datastore_client.get(enrollment_key):
             enrollment = datastore.Entity(key=enrollment_key)
             enrollment.update({
                 'course_id': course_id,
                 'student_id': student_id
             })
-            datastore_client.put(enrollment)
+            current_app.datastore_client.put(enrollment)
 
     for student_id in students_to_remove:
-        enrollment_key = datastore_client.key('enrollments', f"{course_id}_{student_id}")
-        if datastore_client.get(enrollment_key):
-            datastore_client.delete(enrollment_key)
+        enrollment_key = current_app.datastore_client.key('enrollments', f"{course_id}_{student_id}")
+        if current_app.datastore_client.get(enrollment_key):
+            current_app.datastore_client.delete(enrollment_key)
 
     return '', 200
 
