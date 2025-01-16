@@ -1,7 +1,8 @@
-from flask import Flask
+from flask import Flask, jsonify
 from google.cloud import datastore, storage
 from authlib.integrations.flask_client import OAuth
 from app.routes import api_routes
+from app.utils import AuthError
 
 def create_app():
     """
@@ -34,3 +35,10 @@ def create_app():
         authorize_url=f"https://{app.config['DOMAIN']}/authorize",
         client_kwargs={'scope': 'openid profile email'},
     )
+
+    # error handler for the autherror class in utils
+    @app.errorhandler(AuthError)
+    def handle_auth_error(ex):
+        response = jsonify(ex.error)
+        response.status_code = ex.status_code
+        return response
