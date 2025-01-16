@@ -1,7 +1,7 @@
 import json
 from six.moves.urllib.request import urlopen
 from jose import jwt
-from flask import current_app, jsonify
+from flask import current_app
 
 #Error handleing
 class AuthError(Exception):

@@ -42,3 +42,5 @@ def create_app():
         response = jsonify(ex.error)
         response.status_code = ex.status_code
         return response
+    
+    return app
